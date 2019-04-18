@@ -1,0 +1,134 @@
+---
+title: Preliminary Process Mining Analysis Report
+subtitle: Patient journey - LNCC (Part 1/6)
+author: "Marcelo Santos"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: html_notebook
+--- 
+
+###Introduction
+
+This document includes preliminary journey of patients analysis based on the Process Mining framework. We decided to analyze Prenatal, childbirth and Postpartum data once it is considered a bit more predictable in terms of journey than other clinical scenarios.  
+In this sense, we included in this document some preliminary PMA graphics and tables aiming to reveal a first impression of the patient journey in the São Paulo municipality for Prenatal, Childbirth and Postpartum activities. Also, we performed the same analysis to the five regions where the healthcare services are currently structured. Only data collected in 2015 were analyzed in this preliminary experiment.
+
+We organized this document in 6 parts:
+   - Part 1: Municipality of Sao Paulo Analysis
+   - Part 2: CRS Centro Oeste Analysis
+   - Part 3: CRS Leste Analysis
+   - Part 4: CRS Sul Analysis
+   - Part 5: CRS Norte Analysis
+   - Part 6: CRS Sudeste Analysis
+
+```{r echo=FALSE}
+library(dplyr)
+library(bupaR)
+library(bit64)
+```
+
+```{r echo=FALSE}
+data_folder <- paste(getwd(), '/../datasets/', sep='')
+# Opening dfevents (new dataset)
+dfevents <- read.csv(paste(data_folder,"dfevents2015 - prenatal-parto-puerperio - 20181020.csv",sep=''), sep=',', header=T, stringsAsFactors = TRUE)
+# Preparing fields to be used
+dfevents$datacompleta <- as.POSIXct(strptime(as.character(dfevents$datacompleta), "%Y-%m-%d"))
+dfevents$tipoestabelecimentoexecutante <- as.factor(dfevents$tipoestabelecimentoexecutante)
+dfevents$nomeestabelecimentoexecutante <- as.factor(dfevents$nomeestabelecimentoexecutante)
+dfevents$cepcompleto <- as.factor(dfevents$cepcompleto)
+dfevents$nomeespecialidade <- as.factor(dfevents$nomeespecialidade)
+dfevents$codigocid <- as.factor(dfevents$codigocid)
+dfevents$nomecid <- as.factor(dfevents$nomecid)
+dfevents$codigoprocedimento <- as.factor(dfevents$codigoprocedimento)
+dfevents$nomeprocedimento <- as.factor(dfevents$nomeprocedimento)
+dfevents$codigocboexecutante <- as.factor(dfevents$codigocboexecutante)
+dfevents$nomecboexecutante <- as.factor(dfevents$nomecboexecutante)
+dfevents$h2nomenivel2a <- as.factor(dfevents$h2nomenivel2a)
+dfevents$codigocns <- as.factor(as.integer64(dfevents$codigocns))
+```
+
+```{r echo=FALSE}
+# Frequencia de codigocns e tipo de estabelecimento
+dfcnstipoAll <- group_by(dfevents, h2nomenivel2a, codigocns, datacompleta, tipoestabelecimentoexecutante, nomecboexecutante) %>% summarize(qtde=n())
+dfcnstipoAll$activity_id <- row.names(dfcnstipoAll)
+dfcnstipoAll$status <- 1
+dfcnstipoAll$nomecboexecutante <- substring(dfcnstipoAll$nomecboexecutante,1,35)
+rm(dfevents)
+```
+
+### Process Mining
+
+Process mining is a family of techniques in the field of process management that support the analysis of business processes based on event logs(1). The main idea is to analyze data coming from the process from different perspectives and summarize it into information that can be used when making business decisions(2). Based on an event log, a process model is constructed thus capturing the behavior seen in the log(3). 
+
+### General Overview
+
+The next diagrams present counts reflecting the number of times the women/newborns performed the path between two activities. "Start" means the first encounter of a woman and "End" her last encounter in the analyzed period. The arrows at the end of the lines indicate the direction of the flow of people along the path. The weight (thickness) of the lines is directly related to the number of times the path was carried out by the citizen. Certain diagrams also present the relative frequency and idle time in days between two activites.   
+
+```{r echo=FALSE}
+dfcnstipo <- dfcnstipoAll
+```
+
+```{r echo=FALSE}
+# Criando um arquivo de log
+logevents <-  eventlog(dfcnstipo,
+    case_id = 'codigocns',
+    activity_id = 'tipoestabelecimentoexecutante',
+    activity_instance_id = 'activity_id',
+    lifecycle_id = 'status',
+    timestamp = 'datacompleta',
+    resource_id = 'nomecboexecutante')
+```
+
+IMPORTANT: in order to achieve better process map visualizations we are applying a percentile cut off of 95% of existing trace coverage. It means that the process will look at the 95% of the paths (set of steps) most performed by citizens during their journey in the public healthcare system.
+
+```{r echo=FALSE}
+# processando o diagrama de processo
+a<- logevents %>%
+    filter_trace_frequency(perc = 0.95)
+rm(logevents)
+```
+
+The Figure 1 illustrates the type of facilities and the absolute frequency of times people pass in this way during their journey in the public healthcare system in Sao Paulo municipality.
+
+```{r echo=FALSE, fig.height=4, fig.width=9}
+a %>% process_map()
+```
+Figure 1 - Process map of Prenatal, Childbirth and Postpartum activities performed in the Municipality of São Paulo in 2015 - All Regions
+
+The idle time during the paths followed by citizens is shown in the Figure 2.
+
+```{r echo=FALSE, fig.height=4, fig.width=9}
+# Frequency
+a %>% process_map(type_nodes = frequency("absolute"),
+            type_edges = performance(median, "days"))
+```
+Figure 2 - Process map including absolute frequency and idle time of Prenatal, Childbirth and Postpartum activities performed in the Municipality of São Paulo in 2015 - All Regions.  
+
+Idle time during paths and relative frequency for the facilities type is illustrated in the Figure 3.
+
+```{r echo=FALSE, fig.height=4, fig.width=9}
+# Combinando frequencia relativa e média de dias
+a %>% process_map(type_nodes = frequency("relative"),
+            type_edges = performance(median, "days"))
+```
+Figure 3 - Process map including relative frequency and idle time registered during the Prenatal, Childbirth and Postpartum activities performed in the Municipality of São Paulo in 2015 - All Regions. 
+
+The summary of antecedent and consequent type of facility is presented in the Figure 4.
+
+```{r echo=FALSE, fig.height=6, fig.width=9} 
+# análise de precedência
+a %>%
+  precedence_matrix(type = "relative_antecedent") %>% plot
+```
+Figure 4 - Summary of antecedent and consequent type of facility for the Prenatal, Childbirth and Postpartum activities performed in the Municipality of São Paulo in 2015 - All Regions.
+
+```{r, echo=FALSE}
+rm(a, dfcnstipo, dfcnstipoAll)
+```
+
+### Comments
+
+
+### References
+(1) https://en.wikipedia.org/wiki/Process_mining
+(2) https://www.qpr.com/blog/what-process-mining
+(3) Van der Aalst WM. Process discovery: An introduction. InProcess Mining 2011 (pp. 125-156). Springer, Berlin, Heidelberg.
+

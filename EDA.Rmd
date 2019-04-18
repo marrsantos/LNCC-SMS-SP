@@ -1,0 +1,370 @@
+---
+title: "Exploratory Data Analysis Report (EDA)"
+author: "Marcelo Santos"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: html_notebook
+subtitle: Patient journey project - LNCC
+---
+
+###Introduction
+
+This Exploratory Data Analysis (EDA) was developed in the context of Patient journey research project of the National Laboratory of Scientific Computation (LNCC), Brazil. This document is a preliminary study based on a public dataset of the Healthcare System of the Sao Paulo Municipality. We decide to analyze Prenatal, childbirth and Postpartum data once the steps and activities performed in this context could be a bit more predictable in terms of journey than other clinical scenarios. In this sense, this document describes the original datasets, applied filters to generate the main dataset and some frequency tables. This preliminary analysis aims to allow users to understand if the data was correctly collected/prepared,and concepts were understood before advancing on the process mining activities. Only data collected in 2015 were analized in this preliminary analysis.
+  
+    
+###Original Datasets
+  
+####**AT-54A**  
+Dataset of encounters performed in 2015 including ICD codes field:   **~31 milion of records**  
+Main fields: datacompleta, codigocns, tipoestabelecimentoexecutante, nomeestabelecimentoexecutante, codigocboexecutante, nomecboexecutante, codigocid, nomecid, codigoregiao, numerocep
+       
+####**AT-54B**  
+Dataset of encounters performed in 2015 including procedure codes field:  **~28 milion of records**  
+Main fields: datacompleta, codigocns, tipoestabelecimentoexecutante, nomeestabelecimentoexecutante, codigocboexecutante, nomecboexecutante, codigoprocedimento, nomeprocedimento, nomeespecialidade, cepcompleto
+
+###Generating the dataset to Prenatal, Childbirth and Postpartum encounters###
+  
+####Filters applied to original datasets
+
+Dataset AT54A
+```{r}
+# Select records with specific range of CID codes (from O00 to O97).
+#
+#from at54a where substring(codigocid,1,3) like 'O__' and substring(codigocid,2,2)<'98'
+#and codigocid not like '%-%' and codigocns 
+#not like '%-%' and codigocboexecutante not like '%-%'
+```
+
+Dataset AT54B
+```{r}
+#
+# Based on the AT54A selection (including records with CID code), filter 
+# records from AT54B with same codigocns, datacompleta and codigocboexecutante.
+#
+# from at54b a1 left outer join tbatcid b1 using (codigocns, datacompleta, 
+#     codigocboexecutante)
+# where a1.codigocns in (select codigocns from tbatcid group by codigocns) 
+#   and a1.codigoprocedimento not like '%-%' and a1.codigocns not like '%-%' 
+#   and a1.codigocboexecutante not like '%-%' and ((a1.nomeprocedimento like '%Natal%' 
+#   or a1.nomeprocedimento like '%Obste%' or a1.nomeprocedimento like '%Gravid%' 
+#   or a1.nomeprocedimento like '%Puer%' or a1.nomeprocedimento like '%Parto%' 
+#   or a1.nomeprocedimento like '%Gestan%' or a1.nomeprocedimento like '%Fet%' 
+#   or a1.nomeprocedimento like '%Vagin%') 
+#   or a1.nomeespecialidade in ('Ginecologia/Obstetricia - Pré-Natal Alto Risco (R)',
+#   'Anestesiologia', 'Ginecologia (Desativado)', 'Parteira (Desativado)', 
+#   'Enfermeira Obstetra (L)', 'Cirurgia Geral Ginecologica (R)', 'Cirurgia Geral (R)',
+#   'Ginecologia/Obstetricia (R) (L)', 'Cirurgia Ginecologica  - Laqueadura (R)',
+#   'Ginecologia/Obstetricia - Climatério (L)','Pediatria (L)',
+#   'Enfermeira Obstetra (L)', 'Ginecologia (Desativado)',
+#   'Ginecologia/Obstetricia - Climatério (L)', 'Ginecologia/Obstetricia
+#   - Pré-Natal Alto Risco (R)', 'Ginecologia/Obstetricia (R) (L)', 
+#   'Nutrição (R) (L)') or (a1.nomecboexecutante like '%Gineco%' or 
+#   a1.nomecboexecutante like '%Pediatra%'))
+#
+# Selecting other records from AT54B that not match to the CID codes range 
+# but include some specific procedures.
+#
+# from at54b a1 where a1.codigocns not in (select codigocns 
+#      from tbatcid group by codigocns) and a1.codigoprocedimento 
+#      not like '%-%' and a1.codigocns not like '%-%' and a1.codigocboexecutante 
+#      not like '%-%' and (a1.nomeprocedimento like '%Natal%' or 
+#      a1.nomeprocedimento like '%Obste%' or a1.nomeprocedimento 
+#      like '%Gravid%' or a1.nomeprocedimento like '%Puer%'  
+#      or a1.nomeprocedimento like '%Parto%' or a1.nomeprocedimento 
+#      like '%Gestan%' or a1.nomeprocedimento like '%Fet%' or 
+#      a1.nomeprocedimento like '%Vagin%') 
+```
+
+The dataset for Prenatal, Childbirth and Postpartum encounters is created as result of these three mentioned SQL queries. 
+
+
+###Preliminary analysis
+
+```{r include=FALSE}
+library(dplyr)
+library(bit64)
+library(knitr)
+```
+
+```{r echo=FALSE}
+data_folder <- paste(getwd(), '/../datasets/', sep='')
+# Opening dfevents (new dataset)
+dfevents <- read.csv(paste(data_folder,"dfevents2015 - prenatal-parto-puerperio - 20181020.csv",sep=''), sep=',', header=T, stringsAsFactors = TRUE)
+# Preparing fields to be used
+dfevents$datacompleta <- as.POSIXct(strptime(as.character(dfevents$datacompleta), "%Y-%m-%d"))
+dfevents$tipoestabelecimentoexecutante <- as.factor(dfevents$tipoestabelecimentoexecutante)
+dfevents$nomeestabelecimentoexecutante <- as.factor(dfevents$nomeestabelecimentoexecutante)
+dfevents$cepcompleto <- as.factor(dfevents$cepcompleto)
+dfevents$nomeespecialidade <- as.factor(dfevents$nomeespecialidade)
+dfevents$codigocid <- as.factor(dfevents$codigocid)
+dfevents$nomecid <- as.factor(dfevents$nomecid)
+dfevents$codigoprocedimento <- as.factor(dfevents$codigoprocedimento)
+dfevents$nomeprocedimento <- as.factor(dfevents$nomeprocedimento)
+dfevents$codigocboexecutante <- as.factor(dfevents$codigocboexecutante)
+dfevents$nomecboexecutante <- as.factor(dfevents$nomecboexecutante)
+dfevents$h2nomenivel2a <- as.factor(dfevents$h2nomenivel2a)
+dfevents$codigocns <- as.factor(as.integer64(dfevents$codigocns))
+```
+
+Descriptive statistics for the new dataset
+
+Number of records of the dataset -> **`r nrow(dfevents)`**    
+
+Count of pregnant women and probably newborns assisted by the public system in 2015 -> **`r  nrow(table(dfevents$codigocns)) `**  
+
+Number of records including ICD code -> **`r  nrow(dfevents)-table(dfevents$codigocid)[1] `**  
+
+Data sample for each field of the dataset
+```{r echo=FALSE}
+summary(dfevents)
+```
+
+Frequency of citizens that performed some encounter in 2015 per region
+
+```{r echo=FALSE}
+par(mai=c(1.5,0.8,0.28,0.5))
+a<-dfevents %>% group_by(h2nomenivel2a,codigocns) %>% summarize(count=1)
+a<-a[,-2]
+a<-a[,-2]
+b<-barplot(prop.table(table(a))*100, las=2, cex.names = 0.7, ylab='%', ylim=c(0,35), cex=.7)
+text(b,(prop.table(table(a))*100)-1.5,table(a), cex=0.7)
+```
+
+Frequency of encounters per region
+
+```{r echo=FALSE}
+par(mai=c(1.5,0.8,0.28,0.5))
+a<-barplot(prop.table(table(dfevents$h2nomenivel2a))*100, las=2, cex.names = 0.7, ylab='%', cex=.7, ylim=c(0,40))
+text(a,round(prop.table(table(dfevents$h2nomenivel2a))*100,2)-1.5,table(dfevents$h2nomenivel2a), cex=0.7)
+```
+
+Top 5 specialties per region
+
+```{r echo=FALSE} 
+a<-data.frame(table(Regiao=dfevents$h2nomenivel2a, Especialidade=substring(dfevents$nomeespecialidade,1,30))) %>% filter(Freq>0) %>% arrange(Regiao, desc(Freq)) %>% group_by(Regiao) %>% top_n(5, Freq)
+b<-data.frame(table(Regiao=dfevents$h2nomenivel2a)) %>% arrange(Regiao, desc(Freq)) %>% group_by(Regiao)
+a$Regiao<-as.character(a$Regiao)
+b$Regiao<-as.character(b$Regiao)
+c<-left_join(b, a, by = c("Regiao"="Regiao"))
+c$FreqR<-round(c$Freq.y/c$Freq.x*100,3)
+c<-c[,-2]
+colnames(c)[3]<-'FreqA'
+colnames(c)[4]<-'FreqR(%)'
+kable(c)
+```
+
+Top 5 professional types per region
+
+```{r echo=FALSE}
+a<-data.frame(table(Regiao=dfevents$h2nomenivel2a, TipoProfissional=substring(dfevents$nomecboexecutante,1,25))) %>% filter(Freq>0) %>% arrange(Regiao, desc(Freq)) %>% group_by(Regiao) %>% top_n(5, Freq)
+b<-data.frame(table(Regiao=substring(dfevents$h2nomenivel2a,1,30))) %>% arrange(Regiao, desc(Freq)) %>% group_by(Regiao)
+a$Regiao<-as.character(a$Regiao)
+b$Regiao<-as.character(b$Regiao)
+c<-left_join(b, a, by = c("Regiao"="Regiao"))
+c$FreqR<-round(c$Freq.y/c$Freq.x*100,3)
+c<-c[,-2]
+colnames(c)[3]<-'FreqA'
+colnames(c)[4]<-'FreqR(%)'
+kable(c)
+```
+
+Top 5 procedure codes per region
+
+```{r echo=FALSE}
+a<-data.frame(table(Regiao=dfevents$h2nomenivel2a, Procedimento=paste(dfevents$codigoprocedimento,substring(dfevents$nomeprocedimento,1,25), sep='/'))) %>% filter(Freq>0) %>% arrange(Regiao, desc(Freq)) %>% group_by(Regiao) %>% top_n(5, Freq)
+b<-data.frame(table(Regiao=dfevents$h2nomenivel2a)) %>% arrange(Regiao, desc(Freq)) %>% group_by(Regiao)
+c<-left_join(b, a, by = c("Regiao"="Regiao"))
+c$FreqR<-round(c$Freq.y/c$Freq.x*100,3)
+c<-c[,-2]
+colnames(c)[3]<-'FreqA'
+colnames(c)[4]<-'FreqR(%)'
+kable(c)
+```
+
+Top 5 ICD codes per Region
+
+```{r echo=FALSE}
+a<-data.frame(table(Regiao=dfevents$h2nomenivel2a, cid=paste(dfevents$codigocid, substring(dfevents$nomecid,1,25), sep='/'))) %>% filter(Freq>0) %>% arrange(Regiao, desc(Freq)) %>% filter(cid!='/') %>% group_by(Regiao) %>% top_n(5, Freq)
+b<-data.frame(table(Regiao=dfevents$h2nomenivel2a)) %>% arrange(Regiao, desc(Freq)) %>% group_by(Regiao) 
+a$Regiao<-as.character(a$Regiao)
+b$Regiao<-as.character(b$Regiao)
+c<-left_join(b, a, by = c("Regiao"="Regiao"))
+c<- c %>% filter(Freq.y>0)
+c$FreqR<-round(c$Freq.y/c$Freq.x*100,3)
+c<-c[,-2]
+colnames(c)[3]<-'FreqA'
+colnames(c)[4]<-'FreqR(%)'
+kable(c)
+```
+
+Frequency of encounters per type of facility
+```{r echo=FALSE}
+par(mai=c(2.8,0.8,0.28,0.5))
+a<-barplot(prop.table(table(dfevents$tipoestabelecimentoexecutante)*100), las=2, cex.names = 0.7, ylab='%', ylim=c(0,1), cex.axis=0.7, las=2)
+text(a,round(prop.table(table(dfevents$tipoestabelecimentoexecutante)),2)+0.04,table(dfevents$tipoestabelecimentoexecutante), cex=0.7)
+```
+
+Top 5 specialties per type of facility
+
+```{r echo=FALSE} 
+a<-data.frame(table(Tipoestabelecimento=substring(dfevents$tipoestabelecimentoexecutante,1,30), Especialidade=substring(dfevents$nomeespecialidade,1,30))) %>% filter(Freq>0) %>% arrange(Tipoestabelecimento, desc(Freq)) %>% group_by(Tipoestabelecimento) %>% top_n(5, Freq)
+b<-data.frame(table(Tipoestabelecimento=substring(dfevents$tipoestabelecimentoexecutante,1,30))) %>% arrange(Tipoestabelecimento, desc(Freq)) %>% group_by(Tipoestabelecimento)
+a$Tipoestabelecimento<-as.character(a$Tipoestabelecimento)
+b$Tipoestabelecimento<-as.character(b$Tipoestabelecimento)
+c<-left_join(b, a, by = c("Tipoestabelecimento"="Tipoestabelecimento"))
+c$FreqR<-round(c$Freq.y/c$Freq.x*100,3)
+c<-c[,-2]
+colnames(c)[3]<-'FreqA'
+colnames(c)[4]<-'FreqR(%)'
+kable(c)
+```
+
+Top 5 professional type per type of facility
+
+```{r echo=FALSE} 
+a<-data.frame(table(Tipoestabelecimento=substring(dfevents$tipoestabelecimentoexecutante,1,30), TipoProfissional=substring(dfevents$nomecboexecutante,1,25))) %>% filter(Freq>0) %>% arrange(Tipoestabelecimento, desc(Freq)) %>% group_by(Tipoestabelecimento) %>% top_n(5, Freq)
+b<-data.frame(table(Tipoestabelecimento=substring(dfevents$tipoestabelecimentoexecutante,1,30))) %>% arrange(Tipoestabelecimento, desc(Freq)) %>% group_by(Tipoestabelecimento)
+a$Tipoestabelecimento<-as.character(a$Tipoestabelecimento)
+b$Tipoestabelecimento<-as.character(b$Tipoestabelecimento)
+c<-left_join(b, a, by = c("Tipoestabelecimento"="Tipoestabelecimento"))
+c$FreqR<-round(c$Freq.y/c$Freq.x*100,3)
+c<-c[,-2]
+colnames(c)[3]<-'FreqA'
+colnames(c)[4]<-'FreqR(%)'
+kable(c)
+```
+
+Top 5 procedure codes per facility type
+
+```{r echo=FALSE}
+a<-data.frame(table(Tipoestabelecimento=substring(dfevents$tipoestabelecimentoexecutante,1,30), Procedimento=paste(dfevents$codigoprocedimento,substring(dfevents$nomeprocedimento,1,25), sep='/'))) %>% filter(Freq>0) %>% arrange(Tipoestabelecimento, desc(Freq)) %>% group_by(Tipoestabelecimento) %>% top_n(5, Freq)
+b<-data.frame(table(Tipoestabelecimento=dfevents$tipoestabelecimentoexecutante)) %>% arrange(Tipoestabelecimento, desc(Freq)) %>% filter(Freq>0) %>% group_by(Tipoestabelecimento)
+a$Tipoestabelecimento<-as.character(a$Tipoestabelecimento)
+b$Tipoestabelecimento<-as.character(b$Tipoestabelecimento)
+c<-left_join(b, a, by = c("Tipoestabelecimento"="Tipoestabelecimento"))
+c<- c %>% filter(Freq.y>0)
+c$FreqR<-round(c$Freq.y/c$Freq.x*100,3)
+c<-c[,-2]
+colnames(c)[3]<-'FreqA'
+colnames(c)[4]<-'FreqR(%)'
+kable(c)
+```
+
+Top 5 ICD per facility type
+
+```{r echo=FALSE} 
+a<-data.frame(table(Tipoestabelecimento=substring(dfevents$tipoestabelecimentoexecutante,1,30), CID=paste(dfevents$codigocid, substring(dfevents$nomecid,1,25), sep='/'))) %>% filter(Freq>0&CID!='/') %>% arrange(Tipoestabelecimento, desc(Freq)) %>% group_by(Tipoestabelecimento) %>% top_n(5, Freq)
+b<-data.frame(table(Tipoestabelecimento=substring(dfevents$tipoestabelecimentoexecutante,1,30))) %>% arrange(Tipoestabelecimento, desc(Freq)) %>% group_by(Tipoestabelecimento)
+a$Tipoestabelecimento<-as.character(a$Tipoestabelecimento)
+b$Tipoestabelecimento<-as.character(b$Tipoestabelecimento)
+c<-left_join(b, a, by = c("Tipoestabelecimento"="Tipoestabelecimento"))
+c<- c %>% filter(Freq.y>0)
+c$FreqR<-round(c$Freq.y/c$Freq.x*100,3)
+c<-c[,-2]
+colnames(c)[3]<-'FreqA'
+colnames(c)[4]<-'FreqR(%)'
+kable(c)
+```
+
+Frequency of Primary Care encounters per region
+```{r echo=FALSE}
+par(mai=c(1.5,0.8,0.28,0.5))
+t<-subset(dfevents, tipoestabelecimentoexecutante == 'Unidade Básica De Saúde - Ubs')
+t<- t %>% group_by(h2nomenivel2a) %>% summarise(count=n())
+tt<- dfevents %>% group_by(h2nomenivel2a) %>% summarise(count=n())
+a<-barplot(t$count/tt$count, names.arg=t$h2nomenivel2a, las=2, cex.names=0.7, cex.axis=0.7, ylim=c(0,1))
+text(a,t$count/tt$count-0.05,round(t$count/tt$count*100,3), cex=0.7)
+```
+
+Frequency of encounters per type of facility (CRS CENTRO OESTE)
+```{r echo=FALSE}
+par(mai=c(2.8,0.8,0.28,0.5))
+t<-subset(dfevents, h2nomenivel2a == 'CRS CENTRO OESTE')
+a<-barplot(prop.table(table(t$tipoestabelecimentoexecutante)*100), las=2, cex.names = 0.7, ylab='%', ylim=c(0,1), cex.axis=0.7, las=2)
+text(a,round(prop.table(table(t$tipoestabelecimentoexecutante)),2)+0.05,table(t$tipoestabelecimentoexecutante), cex=0.7)
+```
+
+Frequency of encounters per type of facility (CRS LESTE)
+```{r echo=FALSE}
+par(mai=c(2.8,0.8,0.28,0.5))
+t<-subset(dfevents, h2nomenivel2a == 'CRS LESTE')
+a<-barplot(prop.table(table(t$tipoestabelecimentoexecutante)*100), las=2, cex.names = 0.7, ylab='%', ylim=c(0,1.2), cex.axis=0.7, las=2)
+text(a,round(prop.table(table(t$tipoestabelecimentoexecutante)),2)+0.05,table(t$tipoestabelecimentoexecutante), cex=0.7)
+```
+Frequency of encounters per type of facility (CRS SUL)
+```{r echo=FALSE}
+par(mai=c(2.8,0.8,0.28,0.5))
+t<-subset(dfevents, h2nomenivel2a == 'CRS SUL')
+a<-barplot(prop.table(table(t$tipoestabelecimentoexecutante)*100), las=2, cex.names = 0.7, ylab='%', ylim=c(0,1.2), cex.axis=0.7, las=2)
+text(a,round(prop.table(table(t$tipoestabelecimentoexecutante)),2)+0.05,table(t$tipoestabelecimentoexecutante), cex=0.7)
+```
+Frequency of encounters per type of facility (CRS NORTE)
+```{r echo=FALSE}
+par(mai=c(2.8,0.8,0.28,0.5))
+t<-subset(dfevents, h2nomenivel2a == 'CRS NORTE')
+a<-barplot(prop.table(table(t$tipoestabelecimentoexecutante)*100), las=2, cex.names = 0.7, ylab='%', ylim=c(0,1.2), cex.axis=0.7, las=2)
+text(a,round(prop.table(table(t$tipoestabelecimentoexecutante)),2)+0.05,table(t$tipoestabelecimentoexecutante), cex=0.7)
+```
+Frequency of encounters per type of facility (CRS SUDESTE)
+```{r echo=FALSE}
+par(mai=c(2.8,0.8,0.28,0.5))
+t<-subset(dfevents, h2nomenivel2a == 'CRS SUDESTE')
+a<-barplot(prop.table(table(t$tipoestabelecimentoexecutante)*100), las=2, cex.names = 0.7, ylab='%', ylim=c(0,1.2), cex.axis=0.7, las=2)
+text(a,round(prop.table(table(t$tipoestabelecimentoexecutante)),2)+0.05,table(t$tipoestabelecimentoexecutante), cex=0.7)
+```
+
+Frequency of encounters per region and type of facility
+
+```{r echo=FALSE} 
+a<-arrange(data.frame(table(Regiao=dfevents$h2nomenivel2a,Tipoestabelecimento=dfevents$tipoestabelecimentoexecutante)), Regiao, desc(Freq)) %>% filter(Freq>0)
+b<-data.frame(table(Regiao=dfevents$h2nomenivel2a)) %>% arrange(Regiao, desc(Freq)) %>% group_by(Regiao)
+a$Regiao<-as.character(a$Regiao)
+b$Regiao<-as.character(b$Regiao)
+c<-left_join(b, a, by = c("Regiao"="Regiao"))
+c$FreqR<-round(c$Freq.y/c$Freq.x*100,3)
+c<-c[,-2]
+colnames(c)[3]<-'FreqA'
+colnames(c)[4]<-'FreqR(%)'
+kable(c)
+```
+
+Top 5 ICD per specialty
+
+```{r echo=FALSE} 
+a<-data.frame(table(Especialidade=substring(dfevents$nomeespecialidade,1,30), CID=paste(dfevents$codigocid, substring(dfevents$nomecid,1,25), sep='/'))) %>% filter(Freq>0&CID!='/') %>% arrange(Especialidade, desc(Freq)) %>% group_by(Especialidade) %>% top_n(5, Freq)
+b<-data.frame(table(Especialidade=substring(dfevents$nomeespecialidade,1,30))) %>% arrange(Especialidade, desc(Freq)) %>% group_by(Especialidade)
+a$Especialidade<-as.character(a$Especialidade)
+b$Especialidade<-as.character(b$Especialidade)
+c<-left_join(b, a, by = c("Especialidade"="Especialidade"))
+c<- c %>% filter(Freq.y>0)
+c$FreqR<-round(c$Freq.y/c$Freq.x*100,3)
+c<-c[,-2]
+colnames(c)[3]<-'FreqA'
+colnames(c)[4]<-'FreqR(%)'
+kable(c)
+```
+
+Top 5 procedure codes per specialty
+
+```{r echo=FALSE}
+a<-data.frame(table(Especialidade=substring(dfevents$nomeespecialidade,1,30), Procedimento=paste(dfevents$codigoprocedimento,substring(dfevents$nomeprocedimento,1,25), sep='/'))) %>% filter(Freq>0) %>% arrange(Especialidade, desc(Freq)) %>% group_by(Especialidade) %>% top_n(5, Freq)
+b<-data.frame(table(Especialidade=dfevents$nomeespecialidade)) %>% arrange(Especialidade, desc(Freq)) %>% filter(Freq>0) %>% group_by(Especialidade)
+a$Especialidade<-as.character(a$Especialidade)
+b$Especialidade<-as.character(b$Especialidade)
+c<-left_join(b, a, by = c("Especialidade"="Especialidade"))
+c<- c %>% filter(Freq.y>0)
+c$FreqR<-round(c$Freq.y/c$Freq.x*100,3)
+c<-c[,-2]
+colnames(c)[3]<-'FreqA'
+colnames(c)[4]<-'FreqR(%)'
+kable(c)
+```
+
+
+Comments:
+
+- We are including puerperium activities, and probably there is a large number of newborns registered in this dataset. Certainly, the count of  CNS found (`r  nrow(table(dfevents$codigocns)) `  in 2015) is reflecting this fact.
+- Currently, there is a patient dataset avaiable but it does not have the required quality to allow filters based on the age and gender of the citizens.
+
+
+
+  

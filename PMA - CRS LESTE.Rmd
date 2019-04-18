@@ -1,0 +1,114 @@
+---
+title: Preliminary Process Mining Analysis Report
+subtitle: Patient journey - LNCC (Part 3/6)
+author: "Marcelo Santos"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: html_notebook
+--- 
+
+```{r echo=FALSE}
+library(dplyr)
+library(bupaR)
+library(bit64)
+```
+
+```{r echo=FALSE}
+data_folder <- paste(getwd(), '/../datasets/', sep='')
+# Opening dfevents (new dataset)
+dfevents <- read.csv(paste(data_folder,"dfevents2015 - prenatal-parto-puerperio - 20181020.csv",sep=''), sep=',', header=T, stringsAsFactors = TRUE)
+# Preparing fields to be used
+dfevents$datacompleta <- as.POSIXct(strptime(as.character(dfevents$datacompleta), "%Y-%m-%d"))
+dfevents$tipoestabelecimentoexecutante <- as.factor(dfevents$tipoestabelecimentoexecutante)
+dfevents$nomeestabelecimentoexecutante <- as.factor(dfevents$nomeestabelecimentoexecutante)
+dfevents$cepcompleto <- as.factor(dfevents$cepcompleto)
+dfevents$nomeespecialidade <- as.factor(dfevents$nomeespecialidade)
+dfevents$codigocid <- as.factor(dfevents$codigocid)
+dfevents$nomecid <- as.factor(dfevents$nomecid)
+dfevents$codigoprocedimento <- as.factor(dfevents$codigoprocedimento)
+dfevents$nomeprocedimento <- as.factor(dfevents$nomeprocedimento)
+dfevents$codigocboexecutante <- as.factor(dfevents$codigocboexecutante)
+dfevents$nomecboexecutante <- as.factor(dfevents$nomecboexecutante)
+dfevents$h2nomenivel2a <- as.factor(dfevents$h2nomenivel2a)
+dfevents$codigocns <- as.factor(as.integer64(dfevents$codigocns))
+```
+
+```{r echo=FALSE}
+# Frequencia de codigocns e tipo de estabelecimento
+dfcnstipoAll <- group_by(dfevents, h2nomenivel2a, codigocns, datacompleta, tipoestabelecimentoexecutante, nomecboexecutante) %>% summarize(qtde=n())
+dfcnstipoAll$activity_id <- row.names(dfcnstipoAll)
+dfcnstipoAll$status <- 1
+dfcnstipoAll$nomecboexecutante <- substring(dfcnstipoAll$nomecboexecutante,1,35)
+rm(dfevents)
+```
+
+#### CRS LESTE Analysis
+
+```{r echo=FALSE}
+dfcnstipo <- subset(dfcnstipoAll, h2nomenivel2a=='CRS LESTE')
+```
+
+```{r echo=FALSE}
+# Criando um arquivo de log
+logevents <-  eventlog(dfcnstipo,
+    case_id = 'codigocns',
+    activity_id = 'tipoestabelecimentoexecutante',
+    activity_instance_id = 'activity_id',
+    lifecycle_id = 'status',
+    timestamp = 'datacompleta',
+    resource_id = 'nomecboexecutante')
+```
+
+IMPORTANT: in order to achieve better process map visualizations we are applying a percentile cut off of 95% of existing trace coverage. It means that the process will look at the 95% of the paths (set of steps) most performed by citizens during their journey in the public healthcare system.  
+
+```{r echo=FALSE}
+# processando o diagrama de processo
+a<- logevents %>%
+    filter_trace_frequency(perc = 0.95)
+    rm(logevents)
+```
+The Figure 9 illustrates the type of facilities and the absolute frequency of times people pass in this way during their journey in the public healthcare system in Sao Paulo municipality - CRS LESTE.
+
+```{r echo=FALSE, fig.height=4, fig.width=9}
+a %>% process_map()
+```
+Figure 9 - Process map of Prenatal, Childbirth and Postpartum activities performed in the Municipality of São Paulo in 2015 - CRS LESTE.
+
+The idle time during the paths followed by citizens is shown in the Figure 10.
+
+```{r echo=FALSE, fig.height=4, fig.width=9}
+# Frequency
+a %>% process_map(type_nodes = frequency("absolute"),
+            type_edges = performance(median, "days"))
+```
+Figure 10 - Process map including absolute frequency and idle time of Prenatal, Childbirth and Postpartum activities performed in the Municipality of São Paulo in 2015 - CRS LESTE.  
+
+Idle time during paths and relative frequency for the facilities type is illustrated in the Figure 11.
+
+```{r echo=FALSE, fig.height=4, fig.width=9}
+# Combinando frequencia relativa e média de dias
+a %>% process_map(type_nodes = frequency("relative"),
+            type_edges = performance(median, "days"))
+```
+Figure 11 - Process map including relative frequency and idle time registered during the Prenatal, Childbirth and Postpartum activities performed in the Municipality of São Paulo in 2015 - CRS LESTE. 
+
+The summary of antecedent and consequent type of facility is presented in the Figure 12.
+
+```{r echo=FALSE, fig.height=6, fig.width=9} 
+# análise de precedência
+a %>%
+  precedence_matrix(type = "relative_antecedent") %>% plot
+```
+Figure 12 - Summary of antecedent and consequent type of facility for the Prenatal, Childbirth and Postpartum activities performed in the Municipality of São Paulo in 2015 - CRS LESTE.
+
+```{r echo=FALSE}
+rm(a, dfcnstipo, dfcnstipoAll)
+```
+
+### Comments
+
+
+### References
+(1) https://en.wikipedia.org/wiki/Process_mining
+(2) https://www.qpr.com/blog/what-process-mining
+(3) Van der Aalst WM. Process discovery: An introduction. InProcess Mining 2011 (pp. 125-156). Springer, Berlin, Heidelberg.
+
